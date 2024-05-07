@@ -54,6 +54,8 @@ class RegressionModel(object):
         self.hidden_layer_size = 512
         self.batch_size = 200
         self.learning_rate = 0.05
+        self.m = []
+        self.b = []
 
     def run(self, x):
         """
@@ -64,10 +66,24 @@ class RegressionModel(object):
         Returns:
             A node with shape (batch_size x 1) containing predicted y-values
         """
-        m = nn.Parameter(1, self.hidden_layer_size)
-        b = nn.Parameter(1, self.hidden_layer_size)
-        xm = nn.Linear(x, m)
-        return nn.AddBias(xm, b)
+        if len(self.m) == 0:
+            for layers in range(self.hidden_layers + 1):
+                n = 1
+                m = self.hidden_layer_size
+                if layers == self.hidden_layers:
+                    m = n
+                    n = self.hidden_layer_size
+                print(n, m)
+                self.m.append(nn.Parameter(n, m))
+                self.b.append(nn.Parameter(1, self.hidden_layer_size))
+        predicted_y = x;
+        for i, m in enumerate(self.m):
+            b = self.b[i]
+            xm = nn.Linear(predicted_y, m)
+            predicted_y = nn.AddBias(xm, b)
+            if i != len(self.m) - 1:
+                predicted_y = nn.ReLU(predicted_y)
+        return predicted_y
 
     def get_loss(self, x, y):
         """
@@ -79,12 +95,22 @@ class RegressionModel(object):
                 to be used for training
         Returns: a loss node
         """
-        return  nn.SquareLoss(self.run(x), y)
+        return nn.SquareLoss(self.run(x), y)
 
     def train(self, dataset):
         """
         Trains the model.
         """
+        for x, y in dataset.iterate_forever(self.batch_size):
+            loss = self.get_loss(x, y)
+            print(nn.as_scalar(loss))
+            if nn.as_scalar(loss) < 0.015:
+                break
+            for i, m in enumerate(self.m):
+                b = self.b[i]
+                grad_wrt_m, grad_wrt_b = nn.gradients(loss, [m, b])
+                m.update(grad_wrt_m, self.learning_rate)
+                b.update(grad_wrt_b, self.learning_rate)
 
 
 class DigitClassificationModel(object):
@@ -96,8 +122,7 @@ class DigitClassificationModel(object):
     the vector is a floating point number between 0 and 1.
 
     The goal is to sort each digit into one of 10 classes (number 0 through 9).
-
-    (See RegressionModel for more information about the APIs of different
+(See RegressionModel for more information about the APIs of different
     methods here. We recommend that you implement the RegressionModel before
     working on this part of the project.)
     """
