@@ -26,7 +26,7 @@ class PerceptronModel(object):
             x: a node with shape (1 x dimensions)
         Returns: a node containing a single number (the score)
         """
-        "*** YOUR CODE HERE ***"
+        return nn.DotProduct(x, self.get_weights())
 
     def get_prediction(self, x):
         """
@@ -34,13 +34,22 @@ class PerceptronModel(object):
 
         Returns: 1 or -1
         """
-        "*** YOUR CODE HERE ***"
+        if nn.as_scalar(self.run(x)) < 0:
+            return -1
+        return 1
 
     def train(self, dataset):
         """
         Train the perceptron until convergence.
         """
-        "*** YOUR CODE HERE ***"
+        failed = True
+        while failed == True:
+            failed = False
+            for x, y in dataset.iterate_once(1):
+                y_scalar = nn.as_scalar(y);
+                if self.get_prediction(x) != y_scalar:
+                    self.get_weights().update(x, y_scalar)
+                    failed = True
 
 class RegressionModel(object):
     """
@@ -53,7 +62,8 @@ class RegressionModel(object):
         self.hidden_layers = 1
         self.hidden_layer_size = 512
         self.batch_size = 200
-        self.learning_rate = 0.05
+        self.learning_rate = -0.05
+        self.output_size = 1
         self.m = []
         self.b = []
 
@@ -67,15 +77,18 @@ class RegressionModel(object):
             A node with shape (batch_size x 1) containing predicted y-values
         """
         if len(self.m) == 0:
+            n = x.data.size
+            m = self.hidden_layer_size
             for layers in range(self.hidden_layers + 1):
-                n = 1
-                m = self.hidden_layer_size
                 if layers == self.hidden_layers:
+                    n = m
+                    m = self.output_size
+                elif layers > 0:
+                    temp_m = m
                     m = n
-                    n = self.hidden_layer_size
-                print(n, m)
+                    n = temp_m
                 self.m.append(nn.Parameter(n, m))
-                self.b.append(nn.Parameter(1, self.hidden_layer_size))
+                self.b.append(nn.Parameter(1, m))
         predicted_y = x;
         for i, m in enumerate(self.m):
             b = self.b[i]
@@ -103,14 +116,17 @@ class RegressionModel(object):
         """
         for x, y in dataset.iterate_forever(self.batch_size):
             loss = self.get_loss(x, y)
-            print(nn.as_scalar(loss))
-            if nn.as_scalar(loss) < 0.015:
+            if nn.as_scalar(loss) < 0.01:
                 break
+            parameters = []
             for i, m in enumerate(self.m):
                 b = self.b[i]
-                grad_wrt_m, grad_wrt_b = nn.gradients(loss, [m, b])
-                m.update(grad_wrt_m, self.learning_rate)
-                b.update(grad_wrt_b, self.learning_rate)
+                parameters.append(m)
+                parameters.append(b)
+            gradients = nn.gradients(loss, parameters)
+            for i, m in enumerate(self.m):
+                m.update(gradients[i * 2], self.learning_rate)
+                self.b[i].update(gradients[(i * 2) + 1], self.learning_rate)
 
 
 class DigitClassificationModel(object):
@@ -128,10 +144,17 @@ class DigitClassificationModel(object):
     """
     def __init__(self):
         # Initialize your model parameters here
+        self.m = []
+        self.b = []
+        # Initialize your model parameters here
         self.hidden_layers = 1
-        self.hidden_layer_size = 200
+        self.hidden_layer_size = 100
         self.batch_size = 100
-        self.learning_rate = 0.5
+        self.learning_rate = -0.5
+        self.input_size = 784
+        self.output_size = 10
+        self.m = []
+        self.b = []
 
     def run(self, x):
         """
@@ -147,7 +170,27 @@ class DigitClassificationModel(object):
             A node with shape (batch_size x 10) containing predicted scores
                 (also called logits)
         """
-        "*** YOUR CODE HERE ***"
+        if len(self.m) == 0:
+            n = x.data.size
+            m = self.hidden_layer_size
+            for layers in range(self.hidden_layers + 1):
+                if layers == self.hidden_layers:
+                    n = m
+                    m = self.output_size
+                elif layers > 0:
+                    temp_m = m
+                    m = n
+                    n = temp_m
+                self.m.append(nn.Parameter(n, m))
+                self.b.append(nn.Parameter(1, m))
+        predicted_y = x;
+        for i, m in enumerate(self.m):
+            b = self.b[i]
+            xm = nn.Linear(predicted_y, m)
+            predicted_y = nn.AddBias(xm, b)
+            if i != len(self.m) - 1:
+                predicted_y = nn.ReLU(predicted_y)
+        return predicted_y
 
     def get_loss(self, x, y):
         """
@@ -162,13 +205,25 @@ class DigitClassificationModel(object):
             y: a node with shape (batch_size x 10)
         Returns: a loss node
         """
-        "*** YOUR CODE HERE ***"
+        return nn.SoftmaxLoss(self.run(x), y)
 
     def train(self, dataset):
         """
         Trains the model.
         """
-        "*** YOUR CODE HERE ***"
+        for x, y in dataset.iterate_forever(self.batch_size):
+            if dataset.get_validation_accuracy() > .975:
+                break
+            loss = self.get_loss(x, y)
+            parameters = []
+            for i, m in enumerate(self.m):
+                b = self.b[i]
+                parameters.append(m)
+                parameters.append(b)
+            gradients = nn.gradients(loss, parameters)
+            for i, m in enumerate(self.m):
+                m.update(gradients[i * 2], self.learning_rate)
+                self.b[i].update(gradients[(i * 2) + 1], self.learning_rate)
 
 class LanguageIDModel(object):
     """
@@ -187,7 +242,20 @@ class LanguageIDModel(object):
         self.languages = ["English", "Spanish", "Finnish", "Dutch", "Polish"]
 
         # Initialize your model parameters here
-        "*** YOUR CODE HERE ***"
+        self.hidden_layer_size = 100
+        self.batch_size = 100
+        self.output_size = 5;
+        self.learning_rate = -0.15
+        self.W1 = nn.Parameter(self.num_chars,self.hidden_layer_size)
+        self.b1 = nn.Parameter(1,self.hidden_layer_size)
+        self.W2 = nn.Parameter(self.batch_size,self.hidden_layer_size)
+        self.b2 = nn.Parameter(1,self.hidden_layer_size)
+        self.W1_hidden = nn.Parameter(self.batch_size,self.hidden_layer_size)
+        self.b1_hidden = nn.Parameter(1,self.hidden_layer_size)
+        self.W2_hidden = nn.Parameter(self.batch_size,self.hidden_layer_size)
+        self.b2_hidden = nn.Parameter(1,self.hidden_layer_size)
+        self.W_end = nn.Parameter(self.hidden_layer_size,self.output_size)
+        self.b_end = nn.Parameter(1,5)
 
     def run(self, xs):
         """
@@ -219,6 +287,17 @@ class LanguageIDModel(object):
                 (also called logits)
         """
         "*** YOUR CODE HERE ***"
+        for i in range(len(xs)):
+            if i==0:
+                Z1 = nn.AddBias(nn.Linear(xs[i], self.W1), self.b1)
+                A1 = nn.ReLU(Z1);
+                h = nn.AddBias(nn.Linear(A1, self.W2), self.b2)
+            else:
+                Zi = nn.AddBias(nn.Add(nn.Linear(xs[i], self.W1), nn.Linear(h, self.W1_hidden)), self.b1_hidden)
+                Ai = nn.ReLU(Zi)
+                Z_next = nn.AddBias(nn.Linear(Ai, self.W2_hidden), self.b2_hidden)
+                h = nn.ReLU(Z_next)
+        return nn.AddBias(nn.Linear(h, self.W_end), self.b_end)
 
     def get_loss(self, xs, y):
         """
@@ -235,9 +314,24 @@ class LanguageIDModel(object):
         Returns: a loss node
         """
         "*** YOUR CODE HERE ***"
+        ans = self.run(xs)
+        return nn.SoftmaxLoss(ans,y)
 
     def train(self, dataset):
         """
         Trains the model.
         """
-        "*** YOUR CODE HERE ***"
+        for x, y in dataset.iterate_forever(self.batch_size):
+            if dataset.get_validation_accuracy() > .85:
+                break
+            grad_wrt_W1, grad_wrt_b1, grad_wrt_W2, grad_wrt_b2, grad_wrt_W1_hidden, grad_wrt_b1_hidden, grad_wrt_W2_hidden, grad_wrt_b2_hidden, grad_wrt_W_end, grad_wrt_b_end = nn.gradients(self.get_loss(x,y), [self.W1, self.b1, self.W2, self.b2, self.W1_hidden, self.b1_hidden, self.W2_hidden, self.b2_hidden, self.W_end, self.b_end])
+            self.W1.update(grad_wrt_W1, self.learning_rate)
+            self.b1.update(grad_wrt_b1, self.learning_rate)
+            self.W2.update(grad_wrt_W2, self.learning_rate)
+            self.b2.update(grad_wrt_b2, self.learning_rate)
+            self.W1_hidden.update(grad_wrt_W1_hidden, self.learning_rate)
+            self.b1_hidden.update(grad_wrt_b1_hidden, self.learning_rate)
+            self.W2_hidden.update(grad_wrt_W2_hidden, self.learning_rate)
+            self.b2_hidden.update(grad_wrt_b2_hidden, self.learning_rate)
+            self.W_end.update(grad_wrt_W_end, self.learning_rate)
+            self.b_end.update(grad_wrt_b_end, self.learning_rate)
