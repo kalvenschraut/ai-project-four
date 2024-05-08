@@ -322,7 +322,7 @@ class LanguageIDModel(object):
         Trains the model.
         """
         for x, y in dataset.iterate_forever(self.batch_size):
-            if dataset.get_validation_accuracy() > .85:
+            if dataset.get_validation_accuracy() > .87:
                 break
             grad_wrt_W1, grad_wrt_b1, grad_wrt_W2, grad_wrt_b2, grad_wrt_W1_hidden, grad_wrt_b1_hidden, grad_wrt_W2_hidden, grad_wrt_b2_hidden, grad_wrt_W_end, grad_wrt_b_end = nn.gradients(self.get_loss(x,y), [self.W1, self.b1, self.W2, self.b2, self.W1_hidden, self.b1_hidden, self.W2_hidden, self.b2_hidden, self.W_end, self.b_end])
             self.W1.update(grad_wrt_W1, self.learning_rate)
